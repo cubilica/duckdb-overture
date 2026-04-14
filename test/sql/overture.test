@@ -1,0 +1,228 @@
+# name: test/sql/overture.test
+# description: Test overture extension scalar functions and table functions
+# group: [overture]
+
+require overture
+
+# ---------------------------------------------------------------------------
+# overture_category — basic mappings
+# ---------------------------------------------------------------------------
+
+query I
+SELECT overture_category('cafe')
+----
+cafe
+
+query I
+SELECT overture_category('coffee_shop')
+----
+cafe
+
+query I
+SELECT overture_category('restaurant')
+----
+restaurant
+
+query I
+SELECT overture_category('fast_food_restaurant')
+----
+restaurant
+
+query I
+SELECT overture_category('pub')
+----
+bar
+
+query I
+SELECT overture_category('night_club')
+----
+bar
+
+query I
+SELECT overture_category('supermarket')
+----
+grocery
+
+query I
+SELECT overture_category('kindergarten')
+----
+kindergarten
+
+query I
+SELECT overture_category('preschool')
+----
+kindergarten
+
+query I
+SELECT overture_category('metro_station')
+----
+transit
+
+# unmapped category returns NULL
+query I
+SELECT overture_category('unknown_category')
+----
+NULL
+
+# NULL input returns NULL
+query I
+SELECT overture_category(NULL)
+----
+NULL
+
+# ---------------------------------------------------------------------------
+# overture_category — use in expressions
+# ---------------------------------------------------------------------------
+
+query II
+SELECT category, overture_category(category)
+FROM (VALUES ('cafe'), ('coffee_shop'), ('pub'), ('unknown'), (NULL)) t(category)
+----
+cafe	cafe
+coffee_shop	cafe
+pub	bar
+unknown	NULL
+NULL	NULL
+
+# filter by mapped category
+query I
+SELECT count(*) FROM (
+    SELECT overture_category(category) AS mapped
+    FROM (VALUES ('cafe'), ('coffee_shop'), ('unknown'), ('gym'), (NULL)) t(category)
+) WHERE mapped IS NOT NULL
+----
+3
+
+# ---------------------------------------------------------------------------
+# st_tile_index — 2 arg (default cell_size = 0.1°)
+# ---------------------------------------------------------------------------
+
+# Berlin: 52.52°N, 13.405°E -> int(52.52*10)=525, int(13.405*10)=134
+query I
+SELECT st_tile_index(52.52, 13.405)
+----
+525_134
+
+# Paris: 48.856°N, 2.352°E -> 488_23
+query I
+SELECT st_tile_index(48.856, 2.352)
+----
+488_23
+
+# Lisbon (negative longitude): 38.72°N, -9.14°W -> 387_-91
+query I
+SELECT st_tile_index(38.72, -9.14)
+----
+387_-91
+
+# Zero coordinates
+query I
+SELECT st_tile_index(0.0, 0.0)
+----
+0_0
+
+# NULL propagation
+query I
+SELECT st_tile_index(NULL, 13.405)
+----
+NULL
+
+query I
+SELECT st_tile_index(52.52, NULL)
+----
+NULL
+
+# ---------------------------------------------------------------------------
+# st_tile_index — 3 arg (custom cell_size)
+# ---------------------------------------------------------------------------
+
+# cell_size = 1.0° -> coarser grid
+query I
+SELECT st_tile_index(52.52, 13.405, 1.0)
+----
+52_13
+
+# cell_size = 0.01° -> finer grid (~1km)
+query I
+SELECT st_tile_index(52.52, 13.405, 0.01)
+----
+5252_1340
+
+# cell_size = 0.5°
+query I
+SELECT st_tile_index(52.52, 13.405, 0.5)
+----
+105_26
+
+# invalid cell_size throws
+statement error
+SELECT st_tile_index(52.52, 13.405, 0.0)
+----
+cell_size must be positive
+
+statement error
+SELECT st_tile_index(52.52, 13.405, -1.0)
+----
+cell_size must be positive
+
+# ---------------------------------------------------------------------------
+# overture_categories() — table function
+# ---------------------------------------------------------------------------
+
+# returns rows
+query I
+SELECT count(*) > 50 FROM overture_categories()
+----
+true
+
+# check specific mapping exists
+query II
+SELECT * FROM overture_categories() WHERE overture_category = 'coffee_shop'
+----
+coffee_shop	cafe
+
+# all mapped categories are non-null
+query I
+SELECT count(*) FROM overture_categories() WHERE mapped_category IS NULL
+----
+0
+
+# check we can look up a specific mapping
+query I
+SELECT overture_category('metro_station')
+----
+transit
+
+# ---------------------------------------------------------------------------
+# verify all macros are registered
+# ---------------------------------------------------------------------------
+
+query I
+SELECT count(*) FROM duckdb_functions() WHERE function_name = 'read_overture_buildings' AND function_type = 'table_macro'
+----
+1
+
+query I
+SELECT count(*) FROM duckdb_functions() WHERE function_name = 'read_overture_roads' AND function_type = 'table_macro'
+----
+1
+
+query I
+SELECT count(*) FROM duckdb_functions() WHERE function_name = 'read_overture_places' AND function_type = 'table_macro'
+----
+1
+
+query I
+SELECT count(*) FROM duckdb_functions() WHERE function_name = 'read_overture' AND function_type = 'table_macro'
+----
+1
+
+query I
+SELECT count(*) FROM duckdb_functions() WHERE function_name = 'geocode' AND function_type = 'table_macro'
+----
+1
+
+query I
+SELECT count(*) FROM duckdb_functions() WHERE function_name = 'reverse_geocode' AND function_type = 'table_macro'
+----
+1

@@ -1,0 +1,45 @@
+# Descriptor for duckdb/community-extensions
+# To publish: fork https://github.com/duckdb/community-extensions,
+# copy this file to extensions/overture/description.yml, and open a PR.
+
+extension:
+  name: overture
+  description: Overture Maps helpers - category normalization, spatial tiling, and convenience readers for Overture parquet data on S3
+  version: 0.1.0
+  language: C++
+  build: cmake
+  license: MIT
+  maintainers:
+    - flipbitsnotburgers
+
+repo:
+  github: cubilica/duckdb-overture
+  ref: FILL_IN_COMMIT_HASH
+
+docs:
+  hello_world: |
+    -- Map an Overture category to a normalized one
+    SELECT overture_category('coffee_shop');
+    -- 'cafe'
+
+    -- Compute a spatial tile key
+    SELECT st_tile_index(52.52, 13.405);
+    -- '525_134'
+
+    -- List all category mappings
+    SELECT * FROM overture_categories() LIMIT 5;
+
+    -- Read Overture places from S3 (requires spatial + httpfs)
+    LOAD spatial; LOAD httpfs;
+    SET s3_region='us-west-2';
+    SELECT * FROM read_overture_places(west:=13.0, east:=13.8, south:=52.3, north:=52.7) LIMIT 10;
+
+  extended_description: |
+    DuckDB extension for working with Overture Maps data. Provides native C++ functions for
+    category normalization (80+ Overture categories to ~30 normalized ones) and spatial grid
+    tiling, plus table macros that wrap read_parquet with Overture-specific S3 paths and
+    bbox filtering.
+
+    Works in both native DuckDB and DuckDB-WASM (scalar functions and overture_categories table
+    function). The read_overture/read_overture_places macros require the spatial and httpfs
+    extensions.

@@ -1,0 +1,11 @@
+build/
+.cache/
+.vs/
+.idea/
+cmake-build-*/
+duckdb_unittest_tempdir/
+*.o
+*.so
+*.dylib
+*.dll
+test/wasm/

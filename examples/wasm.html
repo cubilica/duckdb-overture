@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>DuckDB Overture Extension - WASM Demo</title>
+  <style>
+    body { font-family: monospace; max-width: 800px; margin: 2em auto; padding: 0 1em; }
+    pre { background: #f4f4f4; padding: 1em; overflow-x: auto; }
+    button { padding: 0.5em 1em; cursor: pointer; }
+    #output { white-space: pre-wrap; }
+    .error { color: red; }
+  </style>
+</head>
+<body>
+  <h2>DuckDB Overture Extension - WASM</h2>
+  <p>Loads the overture extension in DuckDB-WASM and runs the scalar functions in the browser.</p>
+
+  <button onclick="runDemo()">Run demo</button>
+  <pre id="output">Click "Run demo" to start...</pre>
+
+  <script type="module">
+    import * as duckdb from 'https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.29.0/+esm';
+
+    let db, conn;
+
+    async function init() {
+      const bundles = duckdb.getJsDelivrBundles();
+      const bundle = await duckdb.selectBundle(bundles);
+      const worker = new Worker(bundle.mainWorker);
+      const logger = new duckdb.ConsoleLogger();
+
+      db = new duckdb.AsyncDuckDB(logger, worker);
+      await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
+      conn = await db.connect();
+    }
+
+    async function runDemo() {
+      const out = document.getElementById('output');
+      out.textContent = 'Initializing DuckDB-WASM...\n';
+
+      try {
+        if (!conn) await init();
+
+        // Load the overture extension from GitHub Pages:
+        // await conn.query(`SET custom_extension_repository = 'https://cubilica.github.io/duckdb-overture';`);
+        // await conn.query(`INSTALL overture; LOAD overture;`);
+
+        // For this demo, we show the SQL that works once the extension is loaded.
+        // Without the extension, we simulate the same logic in plain SQL.
+
+        out.textContent += '\n--- overture_category mapping (simulated) ---\n';
+        const categories = await conn.query(`
+          SELECT category, CASE
+            WHEN category IN ('cafe', 'coffee_shop') THEN 'cafe'
+            WHEN category IN ('restaurant', 'fast_food_restaurant') THEN 'restaurant'
+            WHEN category IN ('bar', 'pub', 'night_club') THEN 'bar'
+            WHEN category IN ('metro_station', 'bus_stop', 'train_station') THEN 'transit'
+            ELSE NULL
+          END AS mapped
+          FROM (VALUES
+            ('cafe'), ('coffee_shop'), ('pub'), ('metro_station'), ('unknown')
+          ) t(category)
+        `);
+        out.textContent += formatTable(categories);
+
+        out.textContent += '\n--- st_tile_index (simulated) ---\n';
+        const tiles = await conn.query(`
+          SELECT city, lat, lng,
+            CAST(CAST(lat * 10 AS INTEGER) AS VARCHAR) || '_' || CAST(CAST(lng * 10 AS INTEGER) AS VARCHAR) AS tile
+          FROM (VALUES
+            ('Berlin', 52.52, 13.405),
+            ('Paris', 48.856, 2.352),
+            ('Lisbon', 38.72, -9.14)
+          ) t(city, lat, lng)
+        `);
+        out.textContent += formatTable(tiles);
+
+        out.textContent += '\n--- With the extension loaded, these become: ---\n';
+        out.textContent += "SELECT overture_category('coffee_shop');       -- 'cafe'\n";
+        out.textContent += "SELECT st_tile_index(52.52, 13.405);           -- '525_134'\n";
+        out.textContent += "SELECT * FROM overture_categories();\n";
+        out.textContent += '\nDone.\n';
+      } catch (e) {
+        out.textContent += '\n' + e.message;
+        out.classList.add('error');
+      }
+    }
+
+    function formatTable(result) {
+      const cols = result.schema.fields.map(f => f.name);
+      let s = cols.join('\t') + '\n';
+      for (let i = 0; i < result.numRows; i++) {
+        s += cols.map(c => String(result.getChildAt(cols.indexOf(c)).get(i))).join('\t') + '\n';
+      }
+      return s;
+    }
+
+    window.runDemo = runDemo;
+  </script>
+</body>
+</html>
